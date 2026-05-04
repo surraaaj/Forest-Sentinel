@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FOREST SENTINEL — Dashboard</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+<style>
+:root {
+  --bg:       #050505;
+  --surface:  #0d0d0d;
+  --border:   #1f1f1f;
+  --border2:  #2e2e2e;
+  --muted:    #555;
+  --dim:      #888;
+  --text:     #e8e8e8;
+  --bright:   #ffffff;
+  --alert:    #ff2b2b;
+  --safe:     #3b82f6;
+  --warn:     #eab308;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --map-bg:   #0a0a0a;
+  --tile-filter: grayscale(100%) invert(1) brightness(0.25) contrast(1.1);
+  --overlay-bg: rgba(5,5,5,.85);
+  --overlay-bg-strong: rgba(5,5,5,.92);
+}
+
+:root[data-theme="light"] {
+  --bg:       #f7f8fa;
+  --surface:  #ffffff;
+  --border:   #d8dde6;
+  --border2:  #c2cad6;
+  --muted:    #6b7280;
+  --dim:      #4b5563;
+  --text:     #1f2937;
+  --bright:   #0b1220;
+  --safe:     #2563eb;
+  --warn:     #b45309;
+  --map-bg:   #dbe8f5;
+  --tile-filter: none;
+  --overlay-bg: rgba(255,255,255,.9);
+  --overlay-bg-strong: rgba(255,255,255,.95);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; overflow: hidden; }
+
+/* ── LAYOUT ──────────────────────────────────────────────── */
+#app {
+  display: grid;
+  grid-template-rows: 52px 1fr 200px;
+  grid-template-columns: 1fr 340px;
+  grid-template-areas: "header header" "map sidebar" "charts charts";
+  height: 100vh;
+}
+
+/* ── HEADER ──────────────────────────────────────────────── */
+header {
+  grid-area: header;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border2);
+  background: var(--bg); z-index: 100;
+}
+.brand { display:flex; align-items:center; gap:12px; }
+.brand-icon {
+  width:28px; height:28px; border:1.5px solid var(--bright);
+  display:grid; place-items:center;
+}
+.brand-icon svg { width:16px; height:16px; fill:var(--bright); }
+.brand-name { font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.3em; color:var(--bright); text-transform:uppercase; }
+.brand-sub  { font-family:var(--mono); font-size:9px; letter-spacing:.2em; color:var(--muted); margin-top:2px; text-transform:uppercase; }
+.header-right { display:flex; align-items:center; gap:14px; }
+.status-pill { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:10px; letter-spacing:.15em; color:var(--dim); text-transform:uppercase; }
+.status-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); transition:background .3s; }
+.status-dot.connected { background:#22c55e; box-shadow:0 0 6px #22c55e88; }
+.status-dot.alert     { background:var(--alert); box-shadow:0 0 6px #ff2b2b88; animation:pulse 1s infinite; }
+.status-dot.demo      { background:var(--warn);  box-shadow:0 0 6px #eab30888; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+.hdr-btn {
+  font-family:var(--mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+  padding:7px 14px; border:1px solid var(--border2); background:transparent;
+  color:var(--text); cursor:pointer; transition:border-color .2s,color .2s;
+}
+.hdr-btn:hover { border-color:var(--bright); color:var(--bright); }
+.hdr-btn.active { border-color:var(--alert); color:var(--alert); }
+.hdr-btn.dim { color:var(--muted); border-color:var(--border); }
+.hdr-btn.dim:hover { color:var(--dim); border-color:var(--dim); }
+
+#clock { font-family:var(--mono); font-size:11px; color:var(--muted); letter-spacing:.1em; min-width:80px; text-align:right; }
+
+/* ── MAP ─────────────────────────────────────────────────── */
+#map-wrap { grid-area:map; position:relative; border-right:1px solid var(--border); border-bottom:1px solid var(--border); overflow:hidden; }
+#map { width:100%; height:100%; }
+.map-label {
+  position:absolute; top:12px; left:12px; z-index:500;
+  font-family:var(--mono); font-size:9px; letter-spacing:.25em; color:var(--dim);
+  text-transform:uppercase; background:var(--overlay-bg); padding:4px 8px; border:1px solid var(--border2);
+}
+.map-total {
+  position:absolute; top:12px; right:12px; z-index:500;
+  font-family:var(--mono); font-size:9px; letter-spacing:.15em; color:var(--dim);
+  background:var(--overlay-bg); padding:4px 10px; border:1px solid var(--border2);
+  display:flex; align-items:center; gap:14px;
+}
+.legend-item { display:flex; align-items:center; gap:5px; }
+.legend-dot  { width:8px; height:8px; border-radius:50%; }
+
+/* Coord editor panel */
+#coord-panel {
+  position:absolute; bottom:12px; left:12px; z-index:500;
+  background:var(--overlay-bg-strong); border:1px solid var(--border2);
+  padding:10px 14px; min-width:260px; display:none;
+}
+#coord-panel.open { display:block; }
+.cp-title { font-family:var(--mono); font-size:9px; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.cp-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.cp-label { font-family:var(--mono); font-size:9px; color:var(--muted); width:68px; flex-shrink:0; }
+.cp-input {
+  flex:1; background:var(--surface); border:1px solid var(--border2);
+  color:var(--text); font-family:var(--mono); font-size:10px;
+  padding:4px 6px; outline:none;
+}
+.cp-input:focus { border-color:var(--dim); }
+.cp-btns { display:flex; gap:6px; margin-top:8px; }
+.cp-save { font-family:var(--mono); font-size:9px; letter-spacing:.15em; text-transform:uppercase; padding:5px 10px; border:1px solid var(--border2); background:transparent; color:var(--text); cursor:pointer; flex:1; }
+.cp-save:hover { border-color:var(--bright); color:var(--bright); }
+
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+#sidebar { grid-area:sidebar; display:flex; flex-direction:column; border-bottom:1px solid var(--border); overflow:hidden; }
+.sidebar-header { padding:12px 16px; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:9px; letter-spacing:.3em; color:var(--muted); text-transform:uppercase; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+.node-count { font-family:var(--mono); font-size:11px; color:var(--dim); }
+#node-list { flex:1; overflow-y:auto; padding:8px; display:flex; flex-direction:column; gap:8px; }
+#node-list::-webkit-scrollbar { width:3px; }
+#node-list::-webkit-scrollbar-thumb { background:var(--border2); }
+
+.node-card { border:1px solid var(--border); padding:12px; background:var(--surface); cursor:pointer; transition:border-color .15s; }
+.node-card:hover { border-color:var(--border2); }
+.node-card.alert { border-color:var(--alert) !important; }
+.node-card.alert .node-state-tag { background:var(--alert); color:#fff; }
+.node-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+.node-id { font-family:var(--mono); font-size:13px; font-weight:600; color:var(--bright); letter-spacing:.05em; }
+.node-id span { font-size:9px; letter-spacing:.2em; color:var(--muted); margin-left:4px; }
+.node-state-tag { font-family:var(--mono); font-size:9px; letter-spacing:.2em; text-transform:uppercase; padding:3px 8px; background:var(--border); color:var(--dim); font-weight:500; }
+.alert-label { font-family:var(--mono); font-size:11px; font-weight:600; color:var(--alert); letter-spacing:.1em; text-transform:uppercase; margin-bottom:10px; display:none; }
+.node-card.alert .alert-label { display:block; }
+.node-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.node-metric { display:flex; flex-direction:column; gap:2px; }
+.metric-label { font-family:var(--mono); font-size:8px; letter-spacing:.2em; text-transform:uppercase; color:var(--muted); }
+.metric-value { font-family:var(--mono); font-size:12px; color:var(--text); font-weight:500; }
+.metric-value.na { color:var(--muted); font-size:10px; }
+.signal-bar { margin-top:8px; height:2px; background:var(--border); overflow:hidden; }
+.signal-fill { height:100%; background:var(--bright); transition:width .4s; }
+.signal-fill.weak { background:var(--alert); }
+.node-rssi-row { display:flex; justify-content:space-between; margin-top:6px; }
+.rssi-text { font-family:var(--mono); font-size:9px; color:var(--muted); }
+.no-nodes { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:8px; color:var(--muted); font-family:var(--mono); font-size:10px; letter-spacing:.2em; text-align:center; }
+.no-nodes-icon { font-size:28px; opacity:.3; margin-bottom:4px; }
+
+/* coord badge on node card */
+.node-coord { font-family:var(--mono); font-size:8px; color:var(--border2); margin-top:4px; letter-spacing:.05em; }
+.node-coord.set { color:var(--muted); }
+
+/* ── CHARTS ──────────────────────────────────────────────── */
+#charts { grid-area:charts; display:grid; grid-template-columns:1fr 1fr 1fr; border-top:1px solid var(--border); background:var(--bg); }
+.chart-panel { padding:10px 14px; border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.chart-panel:last-child { border-right:none; }
+.chart-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; flex-shrink:0; }
+.chart-title { font-family:var(--mono); font-size:9px; letter-spacing:.25em; text-transform:uppercase; color:var(--muted); }
+.chart-current { font-family:var(--mono); font-size:14px; font-weight:600; color:var(--bright); }
+.chart-unit { font-family:var(--mono); font-size:9px; color:var(--muted); margin-left:3px; }
+.chart-wrap { flex:1; position:relative; min-height:0; }
+
+/* ── LEAFLET OVERRIDES ───────────────────────────────────── */
+.leaflet-container { background:var(--map-bg) !important; }
+.leaflet-tile { filter:var(--tile-filter); }
+.leaflet-control-zoom a { background:var(--surface) !important; color:var(--text) !important; border-color:var(--border2) !important; font-family:var(--mono) !important; }
+.leaflet-control-zoom a:hover { background:var(--border) !important; }
+.leaflet-control-attribution {
+  display:block !important;
+  background:var(--overlay-bg) !important;
+  color:var(--muted) !important;
+  font-family:var(--mono) !important;
+  font-size:9px !important;
+  letter-spacing:.08em !important;
+  text-transform:uppercase !important;
+}
+.leaflet-control-attribution a { color:var(--text) !important; }
+.leaflet-popup-content-wrapper { background:var(--surface) !important; border:1px solid var(--border2) !important; border-radius:0 !important; box-shadow:0 4px 20px rgba(0,0,0,.6) !important; padding:0 !important; }
+.leaflet-popup-content { margin:0 !important; font-family:var(--mono) !important; color:var(--text) !important; }
+.leaflet-popup-tip { background:var(--border2) !important; }
+.leaflet-popup-close-button { color:var(--muted) !important; right:8px !important; top:6px !important; font-size:16px !important; }
+.popup-body { padding:12px 16px; min-width:210px; }
+.popup-node-id { font-size:10px; letter-spacing:.2em; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+.popup-state { font-size:12px; font-weight:600; margin-bottom:10px; text-transform:uppercase; letter-spacing:.1em; }
+.popup-state.alert { color:var(--alert); }
+.popup-state.idle  { color:var(--safe); }
+.popup-row { display:flex; justify-content:space-between; font-size:10px; color:var(--dim); margin-top:3px; }
+.popup-row span:last-child { color:var(--text); }
+.popup-coords { font-size:9px; color:var(--border2); margin-top:8px; border-top:1px solid var(--border); padding-top:6px; letter-spacing:.05em; }
+.popup-coords.set { color:var(--muted); }
+
+/* ── TOAST ───────────────────────────────────────────────── */
+#toast { position:fixed; bottom:210px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--alert); color:#fff; font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; padding:10px 24px; z-index:9999; opacity:0; transition:opacity .3s,transform .3s; pointer-events:none; }
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ── COORD EDITOR MODAL ──────────────────────────────────── */
+#modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:2000; display:none; align-items:center; justify-content:center; }
+#modal-overlay.open { display:flex; }
+#modal-box { background:var(--surface); border:1px solid var(--border2); padding:24px; min-width:340px; max-width:420px; width:90%; }
+.modal-title { font-family:var(--mono); font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:var(--bright); margin-bottom:4px; }
+.modal-sub   { font-family:var(--mono); font-size:9px; color:var(--muted); margin-bottom:18px; letter-spacing:.1em; }
+.modal-field { margin-bottom:12px; }
+.modal-label { font-family:var(--mono); font-size:9px; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.modal-input { width:100%; background:var(--bg); border:1px solid var(--border2); color:var(--text); font-family:var(--mono); font-size:11px; padding:7px 10px; outline:none; }
+.modal-input:focus { border-color:var(--dim); }
+.modal-btns { display:flex; gap:8px; margin-top:18px; }
+.modal-save { flex:1; font-family:var(--mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; padding:9px; border:1px solid var(--bright); background:transparent; color:var(--bright); cursor:pointer; }
+.modal-save:hover { background:var(--bright); color:#000; }
+:root[data-theme="light"] .modal-save:hover { color:#fff; }
+.modal-cancel { font-family:var(--mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase; padding:9px 16px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; }
+.modal-cancel:hover { border-color:var(--dim); color:var(--dim); }
+
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border2); }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── HEADER ─────────────────────────────────────────────── -->
+<header>
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 16 16"><path d="M8 0L10 6H16L11 9.5L13 16L8 12L3 16L5 9.5L0 6H6L8 0Z"/></svg>
+    </div>
+    <div>
+      <div class="brand-name">Forest Sentinel</div>
+      <div class="brand-sub">Environmental Monitoring Network</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">DISCONNECTED</span>
+    </div>
+    <button class="hdr-btn dim" id="demo-btn" onclick="toggleDemo()">DEMO MODE</button>
+    <button class="hdr-btn"     id="connect-btn" onclick="connectSerial()">CONNECT SERIAL</button>
+    <button class="hdr-btn dim" id="coord-btn" onclick="openCoordEditor(null)" title="Set node coordinates">⊕ COORDS</button>
+    <button class="hdr-btn dim" id="theme-btn" onclick="toggleTheme()">LIGHT MODE</button>
+    <div id="clock">--:--:--</div>
+  </div>
+</header>
+
+<!-- ── MAP ────────────────────────────────────────────────── -->
+<div id="map-wrap">
+  <div class="map-label">NODE MAP</div>
+  <div class="map-total" id="map-total">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--safe)"></div>
+      <span id="safe-count"  style="font-family:var(--mono);font-size:9px;color:var(--dim)">0 IDLE</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--alert)"></div>
+      <span id="alert-count" style="font-family:var(--mono);font-size:9px;color:var(--dim)">0 ALERT</span>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<!-- ── SIDEBAR ────────────────────────────────────────────── -->
+<div id="sidebar">
+  <div class="sidebar-header">
+    <span>ACTIVE NODES</span>
+    <span class="node-count" id="node-count-label">0 / 8</span>
+  </div>
+  <div id="node-list">
+    <div class="no-nodes">
+      <div class="no-nodes-icon">◎</div>
+      <div>NO NODES DETECTED</div>
+      <div style="color:var(--border2);margin-top:2px">CONNECT SERIAL OR RUN DEMO</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHARTS ─────────────────────────────────────────────── -->
+<div id="charts">
+  <div class="chart-panel">
+    <div class="chart-header">
+      <span class="chart-title">Sound Level</span>
+      <span><span class="chart-current" id="cur-db">—</span><span class="chart-unit">dBSPL</span></span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-db"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-header">
+      <span class="chart-title">Temperature</span>
+      <span><span class="chart-current" id="cur-temp">—</span><span class="chart-unit">°C</span></span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-temp"></canvas></div>
+  </div>
+  <div class="chart-panel">
+    <div class="chart-header">
+      <span class="chart-title">RSSI / Signal</span>
+      <span><span class="chart-current" id="cur-rssi">—</span><span class="chart-unit">dBm</span></span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-rssi"></canvas></div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<div id="toast"></div>
+
+<!-- ── COORDINATE EDITOR MODAL ────────────────────────────── -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <div class="modal-title">Set Node Coordinates</div>
+    <div class="modal-sub">Each node ID maps to a fixed GPS position on the map.</div>
+    <div class="modal-field">
+      <div class="modal-label">Node ID</div>
+      <input class="modal-input" id="m-id"   type="number" min="1" max="8" placeholder="1" />
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Name / Label</div>
+      <input class="modal-input" id="m-name" type="text" placeholder="North Sector" />
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Latitude</div>
+      <input class="modal-input" id="m-lat"  type="number" step="any" placeholder="15.8281" />
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Longitude</div>
+      <input class="modal-input" id="m-lon"  type="number" step="any" placeholder="78.0373" />
+    </div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeModal()">CANCEL</button>
+      <button class="modal-save"   onclick="saveCoord()">SAVE & PLACE MARKER</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// NODE LOCATION TABLE
+// ───────────────────────────────────────────────────────────
+// Each key is the node's ID as sent in the LoRa JSON ("id" field).
+// lat / lon are the GPS coordinates of that physical node.
+// Edit the DEFAULT_LOCATIONS object below to set your real field
+// coordinates, then save this HTML file — they persist in-memory
+// for the session. (localStorage is intentionally avoided so the
+// file works correctly when opened from disk in Edge / Chrome.)
+// ═══════════════════════════════════════════════════════════
+const DEFAULT_LOCATIONS = {
+  1: { lat: 15.8281, lon: 78.0373, name: "North Sector"   },
+  2: { lat: 15.8310, lon: 78.0430, name: "East Ridge"      },
+  3: { lat: 15.8250, lon: 78.0440, name: "South Post"      },
+  4: { lat: 15.8295, lon: 78.0310, name: "West Perimeter"  },
+  5: { lat: 15.8330, lon: 78.0370, name: "Central Hub"     },
+};
+
+// Pure in-memory copy — edits via ⊕ COORDS button last for the session.
+// To make edits permanent, update DEFAULT_LOCATIONS above and resave the file.
+function loadLocations() {
+  return Object.assign({}, DEFAULT_LOCATIONS);
+}
+
+function saveLocations() {
+  // No-op: locations live in-memory only (avoids storage-blocking in Edge/Chrome
+  // when the file is opened from the local filesystem via file://).
+}
+
+let NODE_LOCATIONS = loadLocations();
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const MAX_CHART_POINTS = 40;
+const nodes   = {};
+const markers = {};
+let serialPort   = null;
+let serialReader = null;
+let serialBuffer = '';
+let serialConnecting = false;
+let serialBaudRate   = 115200;
+let demoInterval = null;
+let demoTick     = 0;
+
+const SERIAL_OPEN_SETTINGS = [
+  { baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' },
+  { baudRate: 9600,   dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none'  },
+];
+
+const chartData = {
+  db:   { labels:[], values:[] },
+  temp: { labels:[], values:[] },
+  rssi: { labels:[], values:[] },
+};
+
+let isLightTheme = false;
+
+// ═══════════════════════════════════════════════════════════
+// MAP INIT
+// ═══════════════════════════════════════════════════════════
+const map = L.map('map', {
+  center: [15.829, 78.038],
+  zoom: 14,
+  zoomControl: true,
+  attributionControl: true,
+});
+
+if (location.protocol === 'file:') {
+  showToast('MAP TILES BLOCKED ON FILE:// — RUN ON HTTP://LOCALHOST');
+}
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+  maxZoom:19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  referrerPolicy: 'strict-origin-when-cross-origin'
+}).addTo(map);
+
+// Ghost markers for all nodes that have saved coordinates (show as grey until heard)
+function drawGhostMarkers() {
+  for (const id in NODE_LOCATIONS) {
+    const loc = NODE_LOCATIONS[id];
+    if (!markers[id]) {
+      const ghostSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+        <circle cx="14" cy="12" r="7" fill="#333" stroke="#555" stroke-width="1.5"/>
+        <path d="M14 36 L9 20 Q14 23 19 20 Z" fill="#333"/>
+        <circle cx="14" cy="12" r="2.5" fill="#555"/>
+      </svg>`;
+      const ghostIcon = L.divIcon({ html:ghostSvg, iconSize:[28,36], iconAnchor:[14,36], popupAnchor:[0,-38], className:'' });
+      const m = L.marker([loc.lat, loc.lon], { icon: ghostIcon, opacity: 0.5 })
+        .addTo(map)
+        .bindPopup(`<div class="popup-body">
+          <div class="popup-node-id">NODE ${id} · ${loc.name}</div>
+          <div class="popup-state idle">NO DATA YET</div>
+          <div class="popup-coords set">📍 ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</div>
+        </div>`);
+      markers['ghost_' + id] = m;
+    }
+  }
+}
+drawGhostMarkers();
+
+function makeIcon(state) {
+  const color  = state === 1 ? '#ff2b2b' : '#3b82f6';
+  const shadow = state === 1 ? '#ff2b2b66' : '#3b82f666';
+  const pulse  = state === 1;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
+    ${pulse ? `<circle cx="16" cy="14" r="12" fill="${shadow}"><animate attributeName="r" values="10;18;10" dur="1.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.6;0;0.6" dur="1.5s" repeatCount="indefinite"/></circle>` : ''}
+    <circle cx="16" cy="14" r="8" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+    <path d="M16 40 L10 22 Q16 26 22 22 Z" fill="${color}"/>
+    ${state===1 ? `<text x="16" y="18" text-anchor="middle" fill="#fff" font-size="10" font-family="monospace" font-weight="bold">!</text>`
+                : `<circle cx="16" cy="14" r="3" fill="#fff"/>`}
+  </svg>`;
+  return L.divIcon({ html:svg, iconSize:[32,40], iconAnchor:[16,40], popupAnchor:[0,-42], className:'' });
+}
+
+function popupHTML(node) {
+  const loc       = NODE_LOCATIONS[node.id];
+  const stateText = node.s === 1 ? node.c.toUpperCase() + ' DETECTED' : 'IDLE';
+  const stateClass = node.s === 1 ? 'alert' : 'idle';
+  const coordStr  = loc ? `📍 ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}` : '📍 not set';
+  const coordCls  = loc ? 'set' : '';
+  return `<div class="popup-body">
+    <div class="popup-node-id">NODE ${node.id} · ${(loc||{}).name||'UNKNOWN'}</div>
+    <div class="popup-state ${stateClass}">${stateText}</div>
+    <div class="popup-row"><span>CONFIDENCE</span><span>${(node.p*100).toFixed(0)}%</span></div>
+    <div class="popup-row"><span>TEMPERATURE</span><span>${node.t.toFixed(1)} °C</span></div>
+    <div class="popup-row"><span>SOUND</span><span>${node.db.toFixed(1)} dBSPL</span></div>
+    ${node.pr ? `<div class="popup-row"><span>PRESSURE</span><span>${parseFloat(node.pr).toFixed(1)} hPa</span></div>` : ''}
+    <div class="popup-row"><span>RSSI</span><span>${node.rssi} dBm</span></div>
+    <div class="popup-row"><span>SNR</span><span>${(node.snr||0).toFixed(1)} dB</span></div>
+    <div class="popup-coords ${coordCls}">${coordStr}
+      &nbsp;·&nbsp;<a href="#" onclick="openCoordEditor(${node.id});return false;" style="color:var(--safe);text-decoration:none;">edit</a>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// COORDINATE EDITOR MODAL
+// ═══════════════════════════════════════════════════════════
+function openCoordEditor(nodeId) {
+  const overlay = document.getElementById('modal-overlay');
+  overlay.classList.add('open');
+  document.getElementById('m-id').value   = nodeId || '';
+  if (nodeId && NODE_LOCATIONS[nodeId]) {
+    const loc = NODE_LOCATIONS[nodeId];
+    document.getElementById('m-name').value = loc.name || '';
+    document.getElementById('m-lat').value  = loc.lat  || '';
+    document.getElementById('m-lon').value  = loc.lon  || '';
+  } else {
+    document.getElementById('m-name').value = '';
+    document.getElementById('m-lat').value  = '';
+    document.getElementById('m-lon').value  = '';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function saveCoord() {
+  const id   = parseInt(document.getElementById('m-id').value);
+  const name = document.getElementById('m-name').value.trim() || `Node ${id}`;
+  const lat  = parseFloat(document.getElementById('m-lat').value);
+  const lon  = parseFloat(document.getElementById('m-lon').value);
+
+  if (!id || isNaN(lat) || isNaN(lon)) {
+    showToast('FILL IN ALL FIELDS');
+    return;
+  }
+
+  NODE_LOCATIONS[id] = { lat, lon, name };
+  saveLocations();
+
+  // Remove ghost marker if present
+  if (markers['ghost_' + id]) {
+    map.removeLayer(markers['ghost_' + id]);
+    delete markers['ghost_' + id];
+  }
+
+  // Update live marker if node is active
+  if (markers[id]) {
+    markers[id].setLatLng([lat, lon]);
+    if (nodes[id]) markers[id].setPopupContent(popupHTML(nodes[id]));
+  } else {
+    // Re-draw ghost for new location
+    const ghostSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+      <circle cx="14" cy="12" r="7" fill="#333" stroke="#555" stroke-width="1.5"/>
+      <path d="M14 36 L9 20 Q14 23 19 20 Z" fill="#333"/>
+      <circle cx="14" cy="12" r="2.5" fill="#555"/>
+    </svg>`;
+    const ghostIcon = L.divIcon({ html:ghostSvg, iconSize:[28,36], iconAnchor:[14,36], popupAnchor:[0,-38], className:'' });
+    const m = L.marker([lat, lon], { icon:ghostIcon, opacity:0.5 })
+      .addTo(map)
+      .bindPopup(`<div class="popup-body">
+        <div class="popup-node-id">NODE ${id} · ${name}</div>
+        <div class="popup-state idle">NO DATA YET</div>
+        <div class="popup-coords set">📍 ${lat.toFixed(5)}, ${lon.toFixed(5)}</div>
+      </div>`);
+    markers['ghost_' + id] = m;
+  }
+
+  map.setView([lat, lon], 15, { animate:true });
+  renderSidebar();
+  closeModal();
+  showToast(`NODE ${id} COORDINATES SAVED`);
+}
+
+// Close modal on overlay click
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ═══════════════════════════════════════════════════════════
+// PACKET PROCESSING
+// ═══════════════════════════════════════════════════════════
+function processPacket(pkt) {
+  if (pkt.dup === 1) return;
+
+  const id   = pkt.id;
+  const prev = nodes[id];
+  nodes[id]  = pkt;
+  pkt._ts    = Date.now();
+
+  // Alert toast
+  if (pkt.s === 1 && (!prev || prev.s !== 1)) {
+    showToast(`⚠ NODE ${id} — ${pkt.c.toUpperCase()} DETECTED`);
+  }
+
+  // Remove ghost marker when node comes live
+  if (markers['ghost_' + id]) {
+    map.removeLayer(markers['ghost_' + id]);
+    delete markers['ghost_' + id];
+  }
+
+  // Map marker
+  const loc = NODE_LOCATIONS[id];
+  if (loc) {
+    if (markers[id]) {
+      markers[id].setIcon(makeIcon(pkt.s));
+      markers[id].setPopupContent(popupHTML(pkt));
+    } else {
+      const m = L.marker([loc.lat, loc.lon], { icon:makeIcon(pkt.s) })
+        .addTo(map)
+        .bindPopup(popupHTML(pkt));
+      markers[id] = m;
+    }
+    markers[id].setOpacity(1);
+  }
+
+  // Charts
+  const ts = new Date().toLocaleTimeString('en-GB', { hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  pushChart('db',   ts, pkt.db);
+  pushChart('temp', ts, pkt.t);
+  pushChart('rssi', ts, pkt.rssi || 0);
+
+  document.getElementById('cur-db').textContent   = pkt.db.toFixed(1);
+  document.getElementById('cur-temp').textContent = pkt.t.toFixed(1);
+  document.getElementById('cur-rssi').textContent = pkt.rssi || '—';
+
+  renderSidebar();
+  renderCounts();
+}
+
+function pushChart(key, label, value) {
+  const d = chartData[key];
+  d.labels.push(label);
+  d.values.push(value);
+  if (d.labels.length > MAX_CHART_POINTS) { d.labels.shift(); d.values.shift(); }
+  const c = charts[key];
+  c.data.labels            = d.labels;
+  c.data.datasets[0].data = d.values;
+  c.update('none');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIDEBAR RENDER
+// ═══════════════════════════════════════════════════════════
+function renderSidebar() {
+  const list = document.getElementById('node-list');
+  const ids  = Object.keys(nodes).map(Number).sort((a,b) => a-b);
+
+  if (ids.length === 0) {
+    list.innerHTML = `<div class="no-nodes">
+      <div class="no-nodes-icon">◎</div>
+      <div>NO NODES DETECTED</div>
+      <div style="color:var(--border2);margin-top:2px">CONNECT SERIAL OR RUN DEMO</div>
+    </div>`;
+    document.getElementById('node-count-label').textContent = '0 / 8';
+    return;
+  }
+
+  document.getElementById('node-count-label').textContent = `${ids.length} / 8`;
+
+  list.innerHTML = ids.map(id => {
+    const n     = nodes[id];
+    const loc   = NODE_LOCATIONS[id];
+    const isAl  = n.s === 1;
+    const rssiPct = Math.max(0, Math.min(100, ((n.rssi||0) + 120) * 1.67));
+    const weak  = (n.rssi||0) < -100;
+    const age   = Math.round((Date.now() - n._ts) / 1000);
+    const coordLine = loc
+      ? `<div class="node-coord set">📍 ${loc.lat.toFixed(4)}, ${loc.lon.toFixed(4)} · ${loc.name}</div>`
+      : `<div class="node-coord"><a href="#" onclick="openCoordEditor(${id});return false;" style="color:var(--safe);text-decoration:none;">⊕ set coordinates</a></div>`;
+
+    return `<div class="node-card ${isAl ? 'alert' : ''}" onclick="focusNode(${id})">
+      <div class="node-card-top">
+        <div class="node-id">NODE ${id}<span>/ ${loc ? loc.name : 'UNSET'}</span></div>
+        <div class="node-state-tag">${isAl ? 'ALERT' : 'IDLE'}</div>
+      </div>
+      ${isAl ? `<div class="alert-label">⚠ ${n.c.toUpperCase()}</div>` : ''}
+      <div class="node-grid">
+        <div class="node-metric">
+          <div class="metric-label">SOUND</div>
+          <div class="metric-value">${n.db.toFixed(1)} <span style="font-size:9px;color:var(--muted)">dB</span></div>
+        </div>
+        <div class="node-metric">
+          <div class="metric-label">TEMP</div>
+          <div class="metric-value">${n.t.toFixed(1)} <span style="font-size:9px;color:var(--muted)">°C</span></div>
+        </div>
+        <div class="node-metric">
+          <div class="metric-label">CONFIDENCE</div>
+          <div class="metric-value">${(n.p*100).toFixed(0)} <span style="font-size:9px;color:var(--muted)">%</span></div>
+        </div>
+        <div class="node-metric">
+          <div class="metric-label">PRESSURE</div>
+          ${n.pr ? `<div class="metric-value">${parseFloat(n.pr).toFixed(0)} <span style="font-size:9px;color:var(--muted)">hPa</span></div>`
+                 : `<div class="metric-value na">— <span style="font-size:9px">*</span></div>`}
+        </div>
+      </div>
+      ${coordLine}
+      <div class="signal-bar"><div class="signal-fill ${weak?'weak':''}" style="width:${rssiPct}%"></div></div>
+      <div class="node-rssi-row">
+        <span class="rssi-text">RSSI ${n.rssi||'—'} dBm</span>
+        <span class="rssi-text">${age}s ago</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderCounts() {
+  const ids = Object.keys(nodes).map(Number);
+  const al  = ids.filter(id => nodes[id].s === 1).length;
+  const safe = ids.length - al;
+  document.getElementById('safe-count').textContent  = `${safe} IDLE`;
+  document.getElementById('alert-count').textContent = `${al} ALERT`;
+  const dot = document.getElementById('status-dot');
+  if (al > 0) {
+    dot.className = 'status-dot alert';
+  } else if (serialPort || demoInterval) {
+    dot.className = demoInterval ? 'status-dot demo' : 'status-dot connected';
+  }
+}
+
+function focusNode(id) {
+  const loc = NODE_LOCATIONS[id];
+  if (loc) {
+    map.setView([loc.lat, loc.lon], 16, { animate:true });
+    if (markers[id]) markers[id].openPopup();
+    else if (markers['ghost_' + id]) markers['ghost_' + id].openPopup();
+  } else {
+    openCoordEditor(id);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════════
+const chartDefaults = {
+  responsive:true, maintainAspectRatio:false, animation:false,
+  interaction:{ intersect:false },
+  plugins:{ legend:{ display:false }, tooltip:{
+    backgroundColor:'#0d0d0d', borderColor:'#2e2e2e', borderWidth:1,
+    titleColor:'#555', bodyColor:'#e8e8e8',
+    titleFont:{ family:"'IBM Plex Mono'", size:9 },
+    bodyFont:{ family:"'IBM Plex Mono'", size:11 },
+    padding:8,
+  }},
+  scales:{
+    x:{ grid:{ color:'#242424' }, ticks:{ color:'#8a8a8a', font:{ family:"'IBM Plex Mono'", size:8 }, maxTicksLimit:6 }, border:{ color:'#2a2a2a' } },
+    y:{ grid:{ color:'#242424' }, ticks:{ color:'#8a8a8a', font:{ family:"'IBM Plex Mono'", size:8 }, maxTicksLimit:4 }, border:{ color:'#2a2a2a' } },
+  }
+};
+
+function makeChart(id, color, yMin, yMax) {
+  const ctx = document.getElementById(id).getContext('2d');
+  const cfg = JSON.parse(JSON.stringify(chartDefaults));
+  if (yMin !== undefined) cfg.scales.y.min = yMin;
+  if (yMax !== undefined) cfg.scales.y.max = yMax;
+  return new Chart(ctx, {
+    type:'line',
+    data:{ labels:[], datasets:[{
+      data:[], borderColor:color, borderWidth:2,
+      pointRadius:0, pointHoverRadius:3, pointHoverBackgroundColor:color,
+      tension:0.3, fill:true,
+      backgroundColor: ctx => {
+        const g = ctx.chart.ctx.createLinearGradient(0,0,0,ctx.chart.height);
+        g.addColorStop(0, color+'22'); g.addColorStop(1, color+'00');
+        return g;
+      }
+    }]},
+    options:cfg
+  });
+}
+
+const charts = {
+  db:   makeChart('chart-db',   '#e8e8e8', 30, 100),
+  temp: makeChart('chart-temp', '#aaaaaa'),
+  rssi: makeChart('chart-rssi', '#8f8f8f', -120, -30),
+};
+
+function refreshChartTheme() {
+  const styles = getComputedStyle(document.documentElement);
+  const gridColor = isLightTheme ? '#d9dee8' : '#242424';
+  const tickColor = isLightTheme ? '#4b5563' : '#8a8a8a';
+  const borderColor = styles.getPropertyValue('--border').trim();
+  const tooltipBg = styles.getPropertyValue('--surface').trim();
+  const tooltipBorder = styles.getPropertyValue('--border2').trim();
+  const tooltipTitle = styles.getPropertyValue('--muted').trim();
+  const tooltipBody = styles.getPropertyValue('--text').trim();
+
+  Object.values(charts).forEach((chart) => {
+    chart.options.plugins.tooltip.backgroundColor = tooltipBg;
+    chart.options.plugins.tooltip.borderColor = tooltipBorder;
+    chart.options.plugins.tooltip.titleColor = tooltipTitle;
+    chart.options.plugins.tooltip.bodyColor = tooltipBody;
+    chart.options.scales.x.grid.color = gridColor;
+    chart.options.scales.y.grid.color = gridColor;
+    chart.options.scales.x.ticks.color = tickColor;
+    chart.options.scales.y.ticks.color = tickColor;
+    chart.options.scales.x.border.color = borderColor;
+    chart.options.scales.y.border.color = borderColor;
+    chart.update('none');
+  });
+}
+
+function applyTheme(lightMode) {
+  isLightTheme = !!lightMode;
+  document.documentElement.setAttribute('data-theme', isLightTheme ? 'light' : 'dark');
+  const themeBtn = document.getElementById('theme-btn');
+  if (themeBtn) themeBtn.textContent = isLightTheme ? 'DARK MODE' : 'LIGHT MODE';
+  refreshChartTheme();
+}
+
+function toggleTheme() {
+  applyTheme(!isLightTheme);
+}
+
+// ═══════════════════════════════════════════════════════════
+// WEB SERIAL — connects to the ESP32 Receiver's USB port
+// ═══════════════════════════════════════════════════════════
+async function connectSerial() {
+  if (serialConnecting) return;
+  serialConnecting = true;
+  const connectBtn = document.getElementById('connect-btn');
+  connectBtn.disabled = true;
+
+  if (serialPort) {
+    await disconnectSerial();
+    serialConnecting = false;
+    connectBtn.disabled = false;
+    return;
+  }
+
+  if (!('serial' in navigator)) {
+    showToast('WEB SERIAL NOT SUPPORTED — USE CHROME OR EDGE ≥89');
+    serialConnecting = false;
+    connectBtn.disabled = false;
+    return;
+  }
+
+  try {
+    // Request user to pick the COM port (receiver's USB)
+    const requestedPort = await navigator.serial.requestPort();
+    const info = requestedPort.getInfo ? requestedPort.getInfo() : {};
+
+    // Bluetooth virtual COM ports often fail with Web Serial open().
+    if (!info.usbVendorId && !info.usbProductId) {
+      showToast('SELECT USB UART PORT (E.G., CP210X/USB SERIAL), NOT BLUETOOTH COM');
+      return;
+    }
+
+    // If a stale lock exists in this page, clear it before reopening.
+    if (requestedPort.readable || requestedPort.writable) {
+      await requestedPort.close();
+    }
+
+    let openError = null;
+    for (const settings of SERIAL_OPEN_SETTINGS) {
+      try {
+        await requestedPort.open(settings);
+        serialPort = requestedPort;
+        serialBaudRate = settings.baudRate;
+        openError = null;
+        break;
+      } catch (err) {
+        openError = err;
+      }
+    }
+
+    if (!serialPort) {
+      throw openError || new Error('UNKNOWN SERIAL OPEN ERROR');
+    }
+
+    document.getElementById('connect-btn').textContent = 'DISCONNECT';
+    document.getElementById('connect-btn').classList.add('active');
+    document.getElementById('status-dot').className   = 'status-dot connected';
+    document.getElementById('status-text').textContent = 'CONNECTED';
+
+    if (demoInterval) toggleDemo();   // stop demo if running
+
+    readSerialLoop();
+    showToast(`SERIAL PORT CONNECTED — ${serialBaudRate} BAUD`);
+  } catch(e) {
+    if (e.name !== 'NotFoundError') {
+      const msg = e && e.message ? e.message : String(e);
+      if (/failed to open serial port|access denied|busy|in use|permission/i.test(msg)) {
+        showToast('SERIAL PORT BUSY — CLOSE SERIAL MONITOR/PUTTY, THEN RETRY');
+      } else {
+        showToast('SERIAL CONNECT FAILED: ' + msg);
+      }
+    }
+    serialPort = null;
+  } finally {
+    serialConnecting = false;
+    connectBtn.disabled = false;
+  }
+}
+
+async function disconnectSerial() {
+  if (serialReader) {
+    try { await serialReader.cancel(); } catch(_) {}
+    serialReader = null;
+  }
+  if (serialPort) {
+    try { await serialPort.close(); } catch(_) {}
+    serialPort = null;
+  }
+  document.getElementById('connect-btn').textContent = 'CONNECT SERIAL';
+  document.getElementById('connect-btn').classList.remove('active');
+  document.getElementById('connect-btn').disabled = false;
+  document.getElementById('status-dot').className    = 'status-dot';
+  document.getElementById('status-text').textContent = 'DISCONNECTED';
+}
+
+async function readSerialLoop() {
+  const decoder = new TextDecoderStream();
+  // pipeTo returns a promise — don't await it or the loop will block
+  serialPort.readable.pipeTo(decoder.writable).catch(() => disconnectSerial());
+  serialReader = decoder.readable.getReader();
+  serialBuffer = '';
+
+  try {
+    while (true) {
+      const { value, done } = await serialReader.read();
+      if (done) break;
+      serialBuffer += value;
+      const lines = serialBuffer.split('\n');
+      serialBuffer = lines.pop();           // keep incomplete last line
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('{')) continue;   // skip debug lines
+        try {
+          const pkt = JSON.parse(trimmed);
+          if (pkt.id !== undefined && pkt.s !== undefined) {
+            processPacket(pkt);
+          }
+        } catch(_) {
+          // malformed JSON — ignore silently
+        }
+      }
+    }
+  } catch(_) {}
+
+  await disconnectSerial();
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEMO MODE
+// ═══════════════════════════════════════════════════════════
+function toggleDemo() {
+  if (demoInterval) {
+    clearInterval(demoInterval);
+    demoInterval = null;
+    document.getElementById('demo-btn').textContent    = 'DEMO MODE';
+    document.getElementById('status-dot').className   = 'status-dot';
+    document.getElementById('status-text').textContent = 'DISCONNECTED';
+    return;
+  }
+  if (serialPort) return;
+
+  document.getElementById('demo-btn').textContent    = 'STOP DEMO';
+  document.getElementById('status-dot').className   = 'status-dot demo';
+  document.getElementById('status-text').textContent = 'DEMO MODE';
+
+  const nodeIds = Object.keys(NODE_LOCATIONS).map(Number);
+  if (!nodeIds.length) { showToast('ADD NODE COORDINATES FIRST'); return; }
+
+  demoInterval = setInterval(() => {
+    demoTick++;
+    const id    = nodeIds[demoTick % nodeIds.length];
+    const alert = (demoTick % 23 === 0) || (demoTick % 37 === 0);
+    const lbl   = alert ? 'chainsaw' : 'noise';
+    processPacket({
+      id, s: alert?1:0, c: lbl,
+      p:  alert ? 0.88+Math.random()*0.11 : Math.random()*0.3,
+      t:  28 + Math.sin(demoTick*0.05)*4 + (id*0.7),
+      db: alert ? 68+Math.random()*12 : 35+Math.random()*8,
+      pr: 1013 + Math.random()*4,
+      rssi: -60 - Math.random()*40 - (id*4),
+      snr:  7 + Math.random()*5,
+      dup: 0,
+    });
+  }, 1800);
+
+  // Seed first 3 nodes
+  nodeIds.slice(0,3).forEach((id,i) => setTimeout(() => {
+    processPacket({ id, s:0, c:'noise', p:0.1+Math.random()*0.1,
+      t:28+i*1.5, db:38+Math.random()*5, pr:1014+Math.random()*2,
+      rssi:-65-(i*8), snr:8+Math.random()*4, dup:0 });
+  }, i*200));
+}
+
+// ═══════════════════════════════════════════════════════════
+// STALE NODE CLEANUP (>3 min no packet → remove)
+// ═══════════════════════════════════════════════════════════
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  for (const id in nodes) {
+    if (nodes[id]._ts && (now - nodes[id]._ts) > 180000) {
+      delete nodes[id];
+      if (markers[id]) { map.removeLayer(markers[id]); delete markers[id]; }
+      // Re-draw ghost if location known
+      const loc = NODE_LOCATIONS[id];
+      if (loc) {
+        const ghostSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+          <circle cx="14" cy="12" r="7" fill="#333" stroke="#555" stroke-width="1.5"/>
+          <path d="M14 36 L9 20 Q14 23 19 20 Z" fill="#333"/>
+          <circle cx="14" cy="12" r="2.5" fill="#555"/>
+        </svg>`;
+        const ghostIcon = L.divIcon({ html:ghostSvg, iconSize:[28,36], iconAnchor:[14,36], popupAnchor:[0,-38], className:'' });
+        markers['ghost_'+id] = L.marker([loc.lat,loc.lon],{icon:ghostIcon,opacity:0.5}).addTo(map)
+          .bindPopup(`<div class="popup-body"><div class="popup-node-id">NODE ${id} · ${loc.name}</div><div class="popup-state idle">OFFLINE</div><div class="popup-coords set">📍 ${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</div></div>`);
+      }
+      changed = true;
+    }
+  }
+  if (changed) { renderSidebar(); renderCounts(); }
+}, 30000);
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════════════
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-GB', { hour12:false });
+}
+tick();
+setInterval(tick, 1000);
+
+applyTheme(false);
+
+// ═══════════════════════════════════════════════════════════
+// RENDER INTERVAL — refreshes "Xs ago" counters
+// ═══════════════════════════════════════════════════════════
+setInterval(() => { if (Object.keys(nodes).length) renderSidebar(); }, 5000);
+</script>
+</body>
+</html>
