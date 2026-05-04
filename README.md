@@ -22,7 +22,11 @@ Forest Sentinel is a LoRa-based environmental monitoring setup with:
 | Dashboard | `index.html` | Browser UI with serial connection, map, charts, node state panel |
 | Training Data | `training data/` | WAV samples (chainsaw, gunshot, noise) used for model work |
 | Model Package | `impulse.zip` | Edge Impulse exported library/package |
-| Hardware References | `circuit_image.png`, `Sender Node.jpeg`, `Reciver Node.jpeg` | Circuit and node wiring visuals |
+| Hardware References | `photos/circuit_image.png`, `photos/Sender Node.jpeg`, `photos/Reciver Node.jpeg` | Circuit and node wiring visuals |
+
+## Circuit diagram
+
+![Forest Sentinel Circuit Diagram](photos/circuit_image.png)
 
 ## Data flow
 
