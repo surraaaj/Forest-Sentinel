@@ -58,5 +58,3 @@ Typical payload fields used across sender/receiver/dashboard:
 - Edge Impulse Arduino SDK (from `impulse.zip`)
 
 ---
-
-This README keeps the repository structure clear without changing any source code behavior.
