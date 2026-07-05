@@ -1,4 +1,4 @@
-# Forest Sentinel
+# Forest 
 
 Forest Sentinel is a LoRa-based environmental monitoring setup with:
 - an **ESP32-S3 sender node** (`sender.ino`) that runs on-device audio inference,
